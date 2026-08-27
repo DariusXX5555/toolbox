@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>toolbox</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: monospace;
+    margin: 0;
+    display: flex;
+    min-height: 100vh;
+  }
+  nav {
+    width: 200px;
+    border-right: 1px solid #ccc;
+    padding: 20px;
+    flex-shrink: 0;
+  }
+  nav h3 { margin-top: 0; }
+  nav div {
+    padding: 6px 0;
+    cursor: pointer;
+  }
+  nav div:hover { text-decoration: underline; }
+  nav div.active { font-weight: bold; }
+  .rainbow {
+    font-weight: bold;
+    background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red);
+    background-size: 400% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: rainbowmove 4s linear infinite;
+  }
+  @keyframes rainbowmove {
+    0% { background-position: 0% 0; }
+    100% { background-position: 400% 0; }
+  }
+  main {
+    padding: 30px;
+    flex-grow: 1;
+    max-width: 700px;
+  }
+  .tool { display: none; }
+  .tool.active { display: block; }
+  textarea {
+    width: 100%;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  input[type=text], input[type=number] {
+    font-family: monospace;
+    padding: 4px;
+  }
+  button {
+    font-family: monospace;
+    padding: 6px 12px;
+    margin: 6px 4px 6px 0;
+    cursor: pointer;
+  }
+  .row { margin: 10px 0; }
+  .out {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-top: 10px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    min-height: 20px;
+  }
+  a.dl { display: inline-block; margin: 4px 8px 4px 0; }
+  hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <h3>toolbox</h3>
+</nav>
+
+<main id="main"></main>
+
+<script>
+/* ---------- framework: register tools ---------- */
+const nav = document.getElementById('nav');
+const main = document.getElementById('main');
+const tools = [];
+
+function registerTool(id, label, buildFn) {
+  tools.push({ id, label, buildFn });
+}
+
+function renderApp() {
+  tools.forEach((t, i) => {
+    const navItem = document.createElement('div');
+    navItem.textContent = t.label;
+    if (t.id === 'shaq') navItem.classList.add('rainbow');
+    navItem.onclick = () => showTool(t.id);
+    navItem.id = 'nav-' + t.id;
+    nav.appendChild(navItem);
+
+    const panel = document.createElement('div');
+    panel.className = 'tool';
+    panel.id = 'tool-' + t.id;
+    main.appendChild(panel);
+    t.buildFn(panel);
+  });
+  showTool(tools[0].id);
+}
+
+function showTool(id) {
+  document.querySelectorAll('.tool').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('nav div').forEach(e => e.classList.remove('active'));
+  document.getElementById('tool-' + id).classList.add('active');
+  document.getElementById('nav-' + id).classList.add('active');
+}
+
+/* ---------- helpers ---------- */
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'text') e.textContent = v;
+    else e.setAttribute(k, v);
+  });
+  children.forEach(c => e.appendChild(c));
+  return e;
+}
+
+/* =========================================================
+   IMAGE: format converter
+========================================================= */
+registerTool('imgconvert', 'image converter', panel => {
+  panel.appendChild(el('h3', { text: 'image format converter' }));
+  panel.appendChild(el('p', { text: 'webp / png / jpeg / bmp / gif — pick files, pick output format' }));
+
+  const input = el('input', { type: 'file', accept: 'image/*', multiple: '' });
+  const select = el('select');
+  ['image/png', 'image/jpeg', 'image/webp', 'image/bmp'].forEach(f => {
+    select.appendChild(el('option', { value: f, text: f.split('/')[1] }));
+  });
+  const qualityRow = el('div', { class: 'row' }, [
+    el('label', { text: 'quality (jpeg/webp only): ' }),
+    (() => { const i = el('input', { type: 'number', min: '1', max: '100', value: '92', style: 'width:60px' }); i.id = 'imgq'; return i; })()
+  ]);
+
+  const list = el('div', { class: 'out' });
+
+  input.onchange = () => {
+    list.innerHTML = '';
+    const outFormat = select.value;
+    const quality = document.getElementById('imgq').value / 100;
+    [...input.files].forEach(file => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (outFormat === 'image/jpeg' || outFormat === 'image/bmp') {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const ext = outFormat.split('/')[1];
+          const name = file.name.replace(/\.[^.]+$/, '') + '.' + ext;
+          const row = el('div');
+          row.appendChild(el('span', { text: file.name + ' → ' }));
+          const a = el('a', { href: url, download: name, class: 'dl', text: name });
+          row.appendChild(a);
+          list.appendChild(row);
+        }, outFormat, quality);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  panel.appendChild(input);
+  panel.appendChild(el('div', { class: 'row' }, [select]));
+  panel.appendChild(qualityRow);
+  panel.appendChild(list);
+});
+
+/* =========================================================
+   IMAGE: resizer
+========================================================= */
+registerTool('imgresize', 'image resizer', panel => {
+  panel.appendChild(el('h3', { text: 'image resizer' }));
+  const input = el('input', { type: 'file', accept: 'image/*' });
+  const w = el('input', { type: 'number', placeholder: 'width', style: 'width:90px' });
+  const h = el('input', { type: 'number', placeholder: 'height', style: 'width:90px' });
+  const keepRatio = el('input', { type: 'checkbox', checked: '' });
+  const btn = el('button', { text: 'resize' });
+  const out = el('div', { class: 'out' });
+
+  let loadedImg = null;
+  input.onchange = () => {
+    const img = new Image();
+    img.onload = () => {
+      loadedImg = img;
+      w.value = img.width;
+      h.value = img.height;
+    };
+    img.src = URL.createObjectURL(input.files[0]);
+  };
+
+  w.oninput = () => {
+    if (keepRatio.checked && loadedImg) {
+      h.value = Math.round(loadedImg.height * (w.value / loadedImg.width));
+    }
+  };
+  h.oninput = () => {
+    if (keepRatio.checked && loadedImg) {
+      w.value = Math.round(loadedImg.width * (h.value / loadedImg.height));
+    }
+  };
+
+  btn.onclick = () => {
+    if (!loadedImg) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = w.value;
+    canvas.height = h.value;
+    canvas.getContext('2d').drawImage(loadedImg, 0, 0, w.value, h.value);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      out.innerHTML = '';
+      out.appendChild(el('a', { href: url, download: 'resized.png', class: 'dl', text: 'download resized.png' }));
+    }, 'image/png');
+  };
+
+  panel.appendChild(input);
+  panel.appendChild(el('div', { class: 'row' }, [
+    el('label', { text: 'w: ' }), w, el('span', { text: ' ' }),
+    el('label', { text: 'h: ' }), h, el('span', { text: ' ' }),
+    el('label', { text: 'lock ratio ' }), keepRatio
+  ]));
+  panel.appendChild(btn);
+  panel.appendChild(out);
+});
+
+/* =========================================================
+   SHAQOMETER
+========================================================= */
+registerTool('shaq', 'shaqometer', panel => {
+  const SHAQ_M = 2.16;   // shaq height in meters (7'1")
+  const SHAQ_KG = 147.4;  // shaq weight in kg (325 lb)
+
+  panel.appendChild(el('h3', { text: 'shaqometer' }));
+  panel.appendChild(el('p', { text: '1 shaq = 2.16 m (7\'1") tall, 147.4 kg (325 lb)' }));
+
+  // height
+  panel.appendChild(el('h3', { text: 'height' }));
+  const m = el('input', { type: 'text', placeholder: 'meters' });
+  const ft = el('input', { type: 'text', placeholder: 'feet', style: 'width:70px' });
+  const inch = el('input', { type: 'text', placeholder: 'inches', style: 'width:70px' });
+  const shaqH = el('input', { type: 'text', placeholder: 'shaqs' });
+
+  const fromM = el('button', { text: 'meters → shaq' });
+  const fromFt = el('button', { text: 'feet+inches → shaq' });
+  const fromShaqH = el('button', { text: 'shaq → m / ft+in' });
+
+  fromM.onclick = () => {
+    const v = parseFloat(m.value);
+    if (isNaN(v)) return;
+    shaqH.value = (v / SHAQ_M).toFixed(2);
+    const totalFeet = v * 3.28084;
+    ft.value = Math.floor(totalFeet);
+    inch.value = ((totalFeet - Math.floor(totalFeet)) * 12).toFixed(1);
+  };
+  fromFt.onclick = () => {
+    const f = parseFloat(ft.value) || 0;
+    const i = parseFloat(inch.value) || 0;
+    const totalFeet = f + i / 12;
+    const meters = totalFeet / 3.28084;
+    m.value = meters.toFixed(2);
+    shaqH.value = (meters / SHAQ_M).toFixed(2);
+  };
+  fromShaqH.onclick = () => {
+    const v = parseFloat(shaqH.value);
+    if (isNaN(v)) return;
+    const meters = v * SHAQ_M;
+    m.value = meters.toFixed(2);
+    const totalFeet = meters * 3.28084;
+    ft.value = Math.floor(totalFeet);
+    inch.value = ((totalFeet - Math.floor(totalFeet)) * 12).toFixed(1);
+  };
+
+  panel.appendChild(el('div', { class: 'row' }, [m, fromM]));
+  panel.appendChild(el('div', { class: 'row' }, [ft, inch, fromFt]));
+  panel.appendChild(el('div', { class: 'row' }, [shaqH, fromShaqH]));
+
+  // weight
+  panel.appendChild(el('hr'));
+  panel.appendChild(el('h3', { text: 'weight' }));
+  const kg = el('input', { type: 'text', placeholder: 'kg' });
+  const lb = el('input', { type: 'text', placeholder: 'pounds' });
+  const shaqW = el('input', { type: 'text', placeholder: 'shaqs' });
+
+  const fromKg = el('button', { text: 'kg → shaq' });
+  const fromLb = el('button', { text: 'lb → shaq' });
+  const fromShaqW = el('button', { text: 'shaq → kg / lb' });
+
+  fromKg.onclick = () => {
+    const v = parseFloat(kg.value);
+    if (isNaN(v)) return;
+    shaqW.value = (v / SHAQ_KG).toFixed(2);
+    lb.value = (v * 2.20462).toFixed(2);
+  };
+  fromLb.onclick = () => {
+    const v = parseFloat(lb.value);
+    if (isNaN(v)) return;
+    const kilos = v / 2.20462;
+    kg.value = kilos.toFixed(2);
+    shaqW.value = (kilos / SHAQ_KG).toFixed(2);
+  };
+  fromShaqW.onclick = () => {
+    const v = parseFloat(shaqW.value);
+    if (isNaN(v)) return;
+    const kilos = v * SHAQ_KG;
+    kg.value = kilos.toFixed(2);
+    lb.value = (kilos * 2.20462).toFixed(2);
+  };
+
+  panel.appendChild(el('div', { class: 'row' }, [kg, fromKg]));
+  panel.appendChild(el('div', { class: 'row' }, [lb, fromLb]));
+  panel.appendChild(el('div', { class: 'row' }, [shaqW, fromShaqW]));
+});
+
+/* =========================================================
+   TEXT: case converter + counter
+========================================================= */
+registerTool('textcase', 'text case / counter', panel => {
+  panel.appendChild(el('h3', { text: 'text case & counter' }));
+  const input = el('textarea', { rows: '6' });
+  const upper = el('button', { text: 'UPPER' });
+  const lower = el('button', { text: 'lower' });
+  const title = el('button', { text: 'Title Case' });
+  const count = el('div', { class: 'out', text: 'chars: 0 | words: 0' });
+  const update = () => {
+    const t = input.value;
+    count.textContent = `chars: ${t.length} | words: ${t.trim() ? t.trim().split(/\s+/).length : 0}`;
+  };
+  upper.onclick = () => { input.value = input.value.toUpperCase(); update(); };
+  lower.onclick = () => { input.value = input.value.toLowerCase(); update(); };
+  title.onclick = () => { input.value = input.value.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase()); update(); };
+  input.oninput = update;
+  panel.appendChild(input);
+  panel.appendChild(el('div', { class: 'row' }, [upper, lower, title]));
+  panel.appendChild(count);
+});
+
+/* =========================================================
+   MISC: timestamp converter
+========================================================= */
+registerTool('timestamp', 'timestamp converter', panel => {
+  panel.appendChild(el('h3', { text: 'unix timestamp ⇄ date' }));
+  const ts = el('input', { type: 'text', placeholder: 'unix timestamp (seconds)' });
+  const toDate = el('button', { text: 'to date →' });
+  const dateOut = el('div', { class: 'out' });
+  toDate.onclick = () => {
+    const n = Number(ts.value);
+    if (!n) { dateOut.textContent = 'invalid'; return; }
+    dateOut.textContent = new Date(n * 1000).toString();
+  };
+  const nowBtn = el('button', { text: 'now →' });
+  nowBtn.onclick = () => { ts.value = Math.floor(Date.now() / 1000); };
+  panel.appendChild(el('div', { class: 'row' }, [ts, toDate, nowBtn]));
+  panel.appendChild(dateOut);
+});
+
+/* =========================================================
+   MISC: color converter
+========================================================= */
+registerTool('color', 'color converter', panel => {
+  panel.appendChild(el('h3', { text: 'hex ⇄ rgb' }));
+  const hex = el('input', { type: 'text', placeholder: '#ff8800' });
+  const rgb = el('input', { type: 'text', placeholder: 'rgb(255,136,0)' });
+  const swatch = el('div', { style: 'width:40px;height:24px;border:1px solid #ccc;display:inline-block;vertical-align:middle;margin-left:8px' });
+  const toRgb = el('button', { text: 'hex → rgb' });
+  const toHex = el('button', { text: 'rgb → hex' });
+  toRgb.onclick = () => {
+    let h = hex.value.trim().replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    if (isNaN(n)) { rgb.value = 'invalid'; return; }
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    rgb.value = `rgb(${r},${g},${b})`;
+    swatch.style.background = rgb.value;
+  };
+  toHex.onclick = () => {
+    const m = rgb.value.match(/(\d+)\D+(\d+)\D+(\d+)/);
+    if (!m) { hex.value = 'invalid'; return; }
+    const [r, g, b] = m.slice(1).map(Number);
+    hex.value = '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    swatch.style.background = hex.value;
+  };
+  panel.appendChild(el('div', { class: 'row' }, [hex, toRgb]));
+  panel.appendChild(el('div', { class: 'row' }, [rgb, toHex, swatch]));
+});
+
+renderApp();
+</script>
+
+</body>
+</html>
